@@ -70,3 +70,33 @@ REMOTE_DESTINATION="~/backups"
 KEEP_ONE_COPY_ON_LOCAL=true # keeps one of each locally on machine
 ```
 
+
+## Incremental Backup Planning
+Option to create incremental daily backups with using MONTHLY and WEEKLY backups as full. 
+
+```SHELL
+BACKUP_DAILY_INCREMENTAL=true
+```
+__M__ - Monthly,
+__W__ - Weekly,
+__D__ - Daily,
+__i__ - Incremental
+
+|         | Mo  | Tu  | We  | Th  | Fr  | Sa  | Su  | Mo  | Tu  | We  | Th  | Fr  | Sa  | Su  | Mo  | Tu  | We  | Th  | Fr  | Sa  | Su  | Mo  | Tu  | We  | Th  | Fr  | Sa  | Su  | Mo  | Tu  |
+|---------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Day     | 1.  | 2.  | 3.  | 4.  | 5.  | 6.  | 7.  | 8.  | 9.  | 10. | 11. | 12. | 13. | 14. | 15. | 16. | 17. | 18. | 19. | 20. | 21. | 22. | 23. | 24. | 25. | 26. | 27. | 28. | 29. | 30. |
+| Classic |  M  |  D  |  D  |  D  |  D  |  D  |  W  |  D  |  D  |  D  |  D  |  D  |  D  |  W  |  D  |  D  |  D  |  D  |  D  |  D  |  W  |  D  |  D  |  D  |  D  |  D  |  D  |  W  |  D  |  D  |
+| Incr.   |  M  | Di  | Di  | Di  | Di  | Di  |  W  | Di  | Di  | Di  | Di  | Di  | Di  |  W  | Di  | Di  | Di  | Di  | Di  | Di  |  W  | Di  | Di  | Di  | Di  | Di  | Di  |  W  | Di  | Di  |
+
+
+## Restore from backup
+```shell
+tar --extract --verbose --listed-incremental=/dev/null --file=PATH_TO_FILE
+
+# in case this is incremental backup you have to start fits first file in chain
+# --file=[MONTHLY|WEEKLY].tar
+# --file=DAILY_MONDAY.tar
+# --file=DAILY_TUESTDAY.tar
+# ...
+
+```

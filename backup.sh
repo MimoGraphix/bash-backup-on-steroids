@@ -26,9 +26,12 @@ REMOTE_DESTINATION="~/backups"
 # keeps one of each locally on machine
 KEEP_ONE_COPY_ON_LOCAL=true
 
+
 ## Timing
 BACKUP_DAILY=true   # if set to false backup will not work
 BACKUP_RETENTION_DAILY=6
+# make incremental backups
+BACKUP_DAILY_INCREMENTAL=true
 
 BACKUP_WEEKLY=true  # if set to false backup will not work
 BACKUP_RETENTION_WEEKLY=3
@@ -140,6 +143,19 @@ set -e
 MONTH=$(date +%d)
 DAYWEEK=$(date +%u)
 
+# Incremental uses weekly and monthly backups as full backups
+if [[ ($BACKUP_DAILY == true) && ($BACKUP_DAILY_INCREMENTAL == true) ]]; then
+  if [[ ($BACKUP_MONTHLY == false) && ($BACKUP_WEEKLY == false) ]]; then
+    # This if failsafe in case of missconfiguration
+    $BACKUP_WEEKLY=true
+    $BACKUP_RETENTION_WEEKLY=1
+  fi
+
+  if [[ ($BACKUP_RETENTION_DAILY -lt 6) ]]; then
+    $BACKUP_RETENTION_DAILY = 6
+  fi
+fi
+
 if [[ ($MONTH -eq 1) && ($BACKUP_MONTHLY == true) ]]; then
   FN='monthly'
 elif [[ ($DAYWEEK -eq 7) && ($BACKUP_WEEKLY == true) ]]; then
@@ -161,6 +177,9 @@ if [[ $MANUAL == true ]]; then
 fi
 
 ACTIVE_BACKUP_DIR="$BACKUP_DIR/$DIR_NAME"
+if [[ (FN == 'daily') && ($BACKUP_DAILY_INCREMENTAL == true) && $MANUAL == false ]]; then
+  ACTIVE_BACKUP_DIR="$ACTIVE_BACKUP_DIR_i"
+fi
 
 
 
@@ -213,17 +232,27 @@ function generateBackup {
       KEY="${index%%::*}"
       VALUE="${index##*::}"
       log "Start $VALUE Backup"
+
+      $TMP_FILE_NAME = "$BACKUP_TEMP/$KEY.tar"
+      if [[ ($FN == 'daily') && ( $BACKUP_DAILY_INCREMENTAL == true ) && ($MANUAL == false) ]]
+        $TMP_FILE_NAME = "$BACKUP_TEMP/$KEY.$DAYWEEK.tar"
+      fi
+
       if [[ $TEST == false ]]; then
+        if [[ ($FN == 'weekly') || ( $FN == 'monthly' ) || ( $BACKUP_DAILY_INCREMENTAL == false ) ]]
+          rm -r "$BACKUP_TEMP/$KEY.snar"
+        fi
+
         # https://newbedev.com/fastest-way-combine-many-files-into-one-tar-czf-is-too-slow
-        tar -cvf "$BACKUP_TEMP/$KEY.tar" "$VALUE"
+        tar -cv --listed-incremental="$BACKUP_TEMP/$KEY.snar" --file "$TMP_FILE_NAME" "$VALUE"
       fi
 
       if [ ! -z $PUBLIC_KEY ]; then
         log "Encrypting $VALUE Backup"
         if [[ $TEST == false ]]; then
-          gpg --encrypt -r $PUBLIC_KEY "$BACKUP_TEMP/$KEY.tar"
+          gpg --encrypt -r $PUBLIC_KEY $TMP_FILE_NAME
           log "Clean unencrypted version"
-          rm "$BACKUP_TEMP/$KEY.tar"
+          rm $TMP_FILE_NAME
         fi
       fi
 
