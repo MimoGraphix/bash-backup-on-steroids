@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 ###############################################
 # Configuration - Start
 ###############################################
@@ -26,14 +25,13 @@ REMOTE_DESTINATION="~/backups"
 # keeps one of each locally on machine
 KEEP_ONE_COPY_ON_LOCAL=true
 
-
 ## Timing
-BACKUP_DAILY=true   # if set to false backup will not work
+BACKUP_DAILY=true # if set to false backup will not work
 BACKUP_RETENTION_DAILY=6
 # make incremental backups
 BACKUP_DAILY_INCREMENTAL=true
 
-BACKUP_WEEKLY=true  # if set to false backup will not work
+BACKUP_WEEKLY=true # if set to false backup will not work
 BACKUP_RETENTION_WEEKLY=3
 
 BACKUP_MONTHLY=true # if set to false backup will not work
@@ -47,7 +45,6 @@ MYSQL_PASSWORD="db-password"
 MYSQL_BIN=/usr/bin/mysql
 MYSQLDUMP_BIN=/usr/bin/mysqldump
 
-
 # options for arguments
 MANUAL=false
 TEST=false
@@ -57,12 +54,11 @@ VERBOSE=false
 # Configuration - End
 ###############################################
 
-
-
 usage() {
   echo "Usage: backup.sh  [ --manual ( Creates one manual backup ) ]
                   [ --ignore-database ]
                   [ --ignore-storage ]
+                  [ --ignore-gpg ]
                   [ --gpg <email@public.key> ]
                   [ -m | --mode <'local-only' | 'remote-only' | 'local-remote'> ]
                   [ -v | --verbose ]
@@ -95,6 +91,10 @@ while :; do
     ;;
   --ignore-storage)
     SRC_CODES=()
+    shift
+    ;;
+  --ignore-gpg)
+    PUBLIC_KEY=
     shift
     ;;
   --gpg)
@@ -147,12 +147,12 @@ DAYWEEK=$(date +%u)
 if [[ ($BACKUP_DAILY == true) && ($BACKUP_DAILY_INCREMENTAL == true) ]]; then
   if [[ ($BACKUP_MONTHLY == false) && ($BACKUP_WEEKLY == false) ]]; then
     # This if failsafe in case of missconfiguration
-    $BACKUP_WEEKLY=true
-    $BACKUP_RETENTION_WEEKLY=1
+    BACKUP_WEEKLY=true
+    BACKUP_RETENTION_WEEKLY=1
   fi
 
   if [[ ($BACKUP_RETENTION_DAILY -lt 6) ]]; then
-    $BACKUP_RETENTION_DAILY = 6
+    BACKUP_RETENTION_DAILY=6
   fi
 fi
 
@@ -176,12 +176,10 @@ if [[ $MANUAL == true ]]; then
   DIR_NAME="manual"
 fi
 
-ACTIVE_BACKUP_DIR="$BACKUP_DIR/$DIR_NAME"
+ACTIVE_BACKUP_DIR="${BACKUP_DIR}/${DIR_NAME}"
 if [[ (FN == 'daily') && ($BACKUP_DAILY_INCREMENTAL == true) && $MANUAL == false ]]; then
-  ACTIVE_BACKUP_DIR="$ACTIVE_BACKUP_DIR_i"
+  ACTIVE_BACKUP_DIR="${ACTIVE_BACKUP_DIR}_i"
 fi
-
-
 
 ###############################################
 # Functions Definitions - Start
@@ -191,7 +189,7 @@ function log {
   if [[ $VERBOSE == true ]]; then
     echo "$1"
   fi
-  echo "$TEXT" >> "$BACKUP_DIR/last_backup.log"
+  echo "$TEXT" >>"$BACKUP_DIR/last_backup.log"
 }
 
 function generateBackup {
@@ -228,29 +226,37 @@ function generateBackup {
   fi
 
   if [ ${#SRC_CODES[@]} -gt 0 ]; then
-    for index in "${SRC_CODES[@]}" ; do
+    for index in "${SRC_CODES[@]}"; do
       KEY="${index%%::*}"
       VALUE="${index##*::}"
       log "Start $VALUE Backup"
 
-      $TMP_FILE_NAME = "$BACKUP_TEMP/$KEY.tar"
-      if [[ ($FN == 'daily') && ( $BACKUP_DAILY_INCREMENTAL == true ) && ($MANUAL == false) ]]
-        $TMP_FILE_NAME = "$BACKUP_TEMP/$KEY.$DAYWEEK.tar"
+      TMP_FILE_NAME="${BACKUP_TEMP}/${KEY}.tar"
+      if [[ ($FN == 'daily') && ($BACKUP_DAILY_INCREMENTAL == true) && ($MANUAL == false) ]]; then
+        TMP_FILE_NAME="${BACKUP_TEMP}/${KEY}.${DAYWEEK}.tar"
+      fi
+
+      if [[ $MANUAL == true ]]; then
+        KEY="manual"
       fi
 
       if [[ $TEST == false ]]; then
-        if [[ ($FN == 'weekly') || ( $FN == 'monthly' ) || ( $BACKUP_DAILY_INCREMENTAL == false ) ]]
-          rm -r "$BACKUP_TEMP/$KEY.snar"
+        if [[ ($FN == 'weekly') || ($FN == 'monthly') || ($BACKUP_DAILY_INCREMENTAL == false) || ($MANUAL == true) ]]; then
+          rm -r "${BACKUP_DIR}/${KEY}.snar"
         fi
 
         # https://newbedev.com/fastest-way-combine-many-files-into-one-tar-czf-is-too-slow
-        tar -cv --listed-incremental="$BACKUP_TEMP/$KEY.snar" --file "$TMP_FILE_NAME" "$VALUE"
+        if [[ $VERBOSE == true ]]; then
+          tar -cv --listed-incremental="${BACKUP_DIR}/${KEY}.snar" --file ${TMP_FILE_NAME} ${VALUE}
+        else
+          tar -c --listed-incremental="${BACKUP_DIR}/${KEY}.snar" --file ${TMP_FILE_NAME} ${VALUE}
+        fi
       fi
 
       if [ ! -z $PUBLIC_KEY ]; then
         log "Encrypting $VALUE Backup"
         if [[ $TEST == false ]]; then
-          gpg --encrypt -r $PUBLIC_KEY $TMP_FILE_NAME
+          gpg --encrypt -r ${PUBLIC_KEY} ${TMP_FILE_NAME}
           log "Clean unencrypted version"
           rm $TMP_FILE_NAME
         fi
@@ -267,7 +273,8 @@ function generateBackup {
 
   log "Move log"
   if [[ $TEST == false ]]; then
-    mv "$BACKUP_DIR/last_backup.log" "$ACTIVE_BACKUP_DIR/backup.log"
+    mv "${BACKUP_DIR}/last_backup.log" "${ACTIVE_BACKUP_DIR}/backup.log"
+    cp "${BACKUP_DIR}/${KEY}.snar" "${ACTIVE_BACKUP_DIR}/${KEY}.snar"
   fi
 }
 
@@ -336,38 +343,37 @@ function remote_only {
 # Functions Definitions - End
 ###############################################
 
-
 log "########################################################################"
 log "# Start backup with MODE: $BACKUP_MODE"
 log "########################################################################"
-if [[ ( $BACKUP_DAILY == true ) && ( ! -z "$BACKUP_RETENTION_DAILY" ) && ( $BACKUP_RETENTION_DAILY -ne 0 ) && ( $FN == "daily" ) ]]; then
+if [[ ($BACKUP_DAILY == true) && (! -z "$BACKUP_RETENTION_DAILY") && ($BACKUP_RETENTION_DAILY -ne 0) && ($FN == "daily") ]]; then
   if [ $BACKUP_MODE == "local-remote" ]; then
-		local_remote
+    local_remote
   elif [ $BACKUP_MODE == "local-only" ]; then
     local_only
   elif [ $BACKUP_MODE == "remote-only" ]; then
     remote_only
-	fi
+  fi
 fi
 
-if [[ ( $BACKUP_WEEKLY == true ) && ( ! -z "$BACKUP_RETENTION_WEEKLY" ) && ( $BACKUP_RETENTION_WEEKLY -ne 0 ) && ( $FN == "weekly" ) ]]; then
+if [[ ($BACKUP_WEEKLY == true) && (! -z "$BACKUP_RETENTION_WEEKLY") && ($BACKUP_RETENTION_WEEKLY -ne 0) && ($FN == "weekly") ]]; then
   if [ $BACKUP_MODE == "local-remote" ]; then
-		local_remote
+    local_remote
   elif [ $BACKUP_MODE == "local-only" ]; then
     local_only
   elif [ $BACKUP_MODE == "remote-only" ]; then
     remote_only
-	fi
+  fi
 fi
 
-if [[ ( $BACKUP_MONTHLY == true ) && ( ! -z "$BACKUP_RETENTION_MONTHLY" ) && ( $BACKUP_RETENTION_MONTHLY -ne 0 ) && ( $FN == "monthly" ) ]]; then
+if [[ ($BACKUP_MONTHLY == true) && (! -z "$BACKUP_RETENTION_MONTHLY") && ($BACKUP_RETENTION_MONTHLY -ne 0) && ($FN == "monthly") ]]; then
   if [ $BACKUP_MODE == "local-remote" ]; then
-		local_remote
+    local_remote
   elif [ $BACKUP_MODE == "local-only" ]; then
     local_only
   elif [ $BACKUP_MODE == "remote-only" ]; then
     remote_only
-	fi
+  fi
 fi
 
 log "End backup"
