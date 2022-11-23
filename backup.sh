@@ -68,7 +68,7 @@ usage() {
 }
 
 # https://www.shellscript.sh/tips/getopt/index.html
-PARSED_ARGUMENTS=$(getopt -a -n alphabet -o vthm: --long manual,ignore-database,ignore-storage,gpg:mode:,verbose,test,help -- "$@")
+PARSED_ARGUMENTS=$(getopt -a -n alphabet -o vthm: --long manual,ignore-database,ignore-storage,ignore-gpg,gpg:mode:,verbose,test,help -- "$@")
 VALID_ARGUMENTS=$?
 if [ "$VALID_ARGUMENTS" != "0" ]; then
   usage
