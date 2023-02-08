@@ -156,7 +156,8 @@ if [[ ($BACKUP_DAILY == true) && ($BACKUP_DAILY_INCREMENTAL == true) ]]; then
   fi
 fi
 
-if [[ ($MONTH -eq 1) && ($BACKUP_MONTHLY == true) ]]; then
+# https://stackoverflow.com/a/24777667
+if [[ (${MONTH#0} -eq 1) && ($BACKUP_MONTHLY == true) ]]; then
   FN='monthly'
 elif [[ ($DAYWEEK -eq 7) && ($BACKUP_WEEKLY == true) ]]; then
   FN='weekly'
@@ -241,8 +242,10 @@ function generateBackup {
       fi
 
       if [[ $TEST == false ]]; then
-        if [[ ($FN == 'weekly') || ($FN == 'monthly') || ($BACKUP_DAILY_INCREMENTAL == false) || ($MANUAL == true) ]]; then
-          rm -r "${BACKUP_DIR}/${KEY}.snar"
+        if [[ ($FN == 'weekly') || ($FN == 'monthly') || ($BACKUP_DAILY_INCREMENTAL == false) || ($BACKUP_DAILY_INCREMENTAL == true && $MANUAL == true) ]]; then
+          if [ -f "${BACKUP_DIR}/${KEY}.snar" ]; then
+            rm -r "${BACKUP_DIR}/${KEY}.snar"
+          fi
         fi
 
         # https://newbedev.com/fastest-way-combine-many-files-into-one-tar-czf-is-too-slow
