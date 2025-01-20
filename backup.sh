@@ -45,6 +45,10 @@ MYSQL_PASSWORD="db-password"
 MYSQL_BIN=/usr/bin/mysql
 MYSQLDUMP_BIN=/usr/bin/mysqldump
 
+# in case you want ssl just replace --skip-ssl for empty string
+# nev version of mariadbmysqldump has it as default.
+MYSQLDUMP_SSL="--skip-ssl"
+
 # options for arguments
 MANUAL=false
 TEST=false
@@ -210,7 +214,7 @@ function generateBackup {
     for db in $databases; do
       log "Start DB $db Backup"
       if [[ $TEST == false ]]; then
-        $MYSQLDUMP_BIN --force --opt -h ${MYSQL_HOST} -P ${MYSQL_PORT} --user=${MYSQL_USER} -p${MYSQL_PASSWORD} --databases $db | gzip >"$BACKUP_TEMP/mysql/$db.sql.gz"
+        $MYSQLDUMP_BIN --force --opt -h ${MYSQL_HOST} -P ${MYSQL_PORT} --user=${MYSQL_USER} -p${MYSQL_PASSWORD} ${MYSQLDUMP_SSL} --databases $db | gzip >"$BACKUP_TEMP/mysql/$db.sql.gz"
       fi
 
       if [ ! -z $PUBLIC_KEY ]; then
